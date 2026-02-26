@@ -10,16 +10,21 @@
     button { cursor: pointer; }
     .card { border: 1px solid #ddd; border-radius: 12px; padding: 12px; margin-top: 12px; }
     .muted { color: #666; font-size: 14px; margin: 6px 0 10px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   </style>
 </head>
 <body>
   <h2>Yol Hesaplayıcı</h2>
-  <p class="muted">Sadece istenen 3 değer hesaplanır: benzin, evuzaklik, toplamuzaklik.</p>
+  <p class="muted">Adres yazarken otomatik öneri gelir. Hesap sonrası hedefi Google Maps'te açabilirsiniz.</p>
 
   <label>Kullanıcının gitmek istediği adres</label>
-  <input id="hedef" type="text" placeholder="örn Isparta Otogar">
+  <input id="hedef" type="text" list="adresOnerileri" placeholder="örn Isparta Otogar" autocomplete="off">
+  <datalist id="adresOnerileri"></datalist>
 
-  <button id="hesaplaBtn" onclick="hesapla()">Hesapla</button>
+  <div class="row">
+    <button id="hesaplaBtn" onclick="hesapla()">Hesapla</button>
+    <button id="mapsBtn" onclick="hedefiGoogleMapsteAc()" disabled>Google Maps'te Aç</button>
+  </div>
 
   <div class="card" id="sonuc">Sonuç burada görünecek</div>
 
@@ -27,6 +32,8 @@
 const AKKENT_TOKI_ADRESI = "Akkent TOKİ, Isparta";
 const OPET_URL = "https://www.opet.com.tr/akaryakit-fiyatlari/isparta";
 const YEDEK_BENZIN = 59.23;
+let hedefMapsLinki = "";
+let autocompleteTimer;
 
 function yaz(metin) {
   document.getElementById("sonuc").innerHTML = metin;
@@ -49,7 +56,7 @@ async function adresToCoord(adres) {
   if (!r.ok) throw new Error(`Adres bulunamadı: ${adres}`);
   const d = await r.json();
   if (!Array.isArray(d) || !d.length) throw new Error(`Adres bulunamadı: ${adres}`);
-  return { lat: Number(d[0].lat), lon: Number(d[0].lon) };
+  return { lat: Number(d[0].lat), lon: Number(d[0].lon), ad: d[0].display_name };
 }
 
 async function rotaKm(a, b) {
@@ -65,7 +72,7 @@ async function rotaKm(a, b) {
 async function benzinGetir() {
   const kaynaklar = [
     `https://api.allorigins.win/raw?url=${encodeURIComponent(OPET_URL)}`,
-    `https://r.jina.ai/http://www.opet.com.tr/akaryakit-fiyatlari/isparta`
+    "https://r.jina.ai/http://www.opet.com.tr/akaryakit-fiyatlari/isparta"
   ];
 
   for (const url of kaynaklar) {
@@ -85,19 +92,42 @@ async function benzinGetir() {
 
       return Number(m[0][1].replace(",", "."));
     } catch {
-      // sonraki kaynağı dene
+      // sonraki kaynak
     }
   }
 
   return YEDEK_BENZIN;
 }
 
+async function adresOnerisiGetir(sorgu) {
+  if (sorgu.length < 3) {
+    document.getElementById("adresOnerileri").innerHTML = "";
+    return;
+  }
+
+  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=${encodeURIComponent(sorgu)}`;
+  const r = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!r.ok) return;
+  const list = await r.json();
+
+  const html = list.map((x) => `<option value="${x.display_name.replace(/"/g, "&quot;")}"></option>`).join("");
+  document.getElementById("adresOnerileri").innerHTML = html;
+}
+
+function hedefiGoogleMapsteAc() {
+  if (!hedefMapsLinki) return;
+  window.open(hedefMapsLinki, "_blank", "noopener,noreferrer");
+}
+
 async function hesapla() {
   const hedef = document.getElementById("hedef").value.trim();
   const btn = document.getElementById("hesaplaBtn");
+  const mapsBtn = document.getElementById("mapsBtn");
   if (!hedef) return yaz("Lütfen gitmek istediğiniz adresi yazın");
 
   btn.disabled = true;
+  mapsBtn.disabled = true;
+  hedefMapsLinki = "";
   yaz("Hesaplanıyor...");
 
   try {
@@ -113,11 +143,14 @@ async function hesapla() {
     const hedefToAkkent = await rotaKm(hedefCoord, akkent);
     const toplamuzaklik = userToHedef + hedefToAkkent;
 
+    hedefMapsLinki = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${user.lat},${user.lon}`)}&destination=${encodeURIComponent(hedefCoord.ad || hedef)}`;
+    mapsBtn.disabled = false;
+
     yaz(
       `benzin (Kurşunsuz Benzin 95 / Ultra Force 95): <b>${benzin.toFixed(2)} TL</b><br>` +
       `evuzaklik (kullanıcı konumu → Akkent TOKİ): <b>${evuzaklik.toFixed(2)} km</b><br>` +
       `toplamuzaklik (kullanıcı konumu → hedef + hedef → Akkent TOKİ): <b>${toplamuzaklik.toFixed(2)} km</b><br><br>` +
-      `<small>Google Maps kontrol: <a target="_blank" href="https://www.google.com/maps/search/${encodeURIComponent(AKKENT_TOKI_ADRESI)}">Akkent TOKİ</a></small>`
+      `<small>Hedef Google Maps yön tarifi hazırlandı.</small>`
     );
   } catch (e) {
     yaz(`Hata: ${e.message}`);
@@ -125,6 +158,13 @@ async function hesapla() {
     btn.disabled = false;
   }
 }
+
+document.getElementById("hedef").addEventListener("input", (e) => {
+  clearTimeout(autocompleteTimer);
+  autocompleteTimer = setTimeout(() => {
+    adresOnerisiGetir(e.target.value.trim()).catch(() => {});
+  }, 300);
+});
 </script>
 </body>
 </html>
