@@ -3,23 +3,27 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Yol Hesaplayıcı</title>
+  <title>selmantag</title>
   <style>
-    body { font-family: system-ui, Arial; max-width: 560px; margin: 24px auto; padding: 0 12px; }
+    body { font-family: system-ui, Arial; max-width: 620px; margin: 24px auto; padding: 0 12px; }
     input, button { width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; }
     button { cursor: pointer; }
     .card { border: 1px solid #ddd; border-radius: 12px; padding: 12px; margin-top: 12px; }
     .muted { color: #666; font-size: 14px; margin: 6px 0 10px; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .list { border: 1px solid #ddd; border-radius: 10px; max-height: 190px; overflow-y: auto; margin-top: -4px; }
+    .list button { text-align: left; background: #fff; border: 0; border-bottom: 1px solid #eee; margin: 0; border-radius: 0; }
+    .list button:last-child { border-bottom: 0; }
+    .list button:hover { background: #f6f8ff; }
   </style>
 </head>
 <body>
-  <h2>Yol Hesaplayıcı</h2>
-  <p class="muted">Adres yazarken otomatik öneri gelir. Hesap sonrası hedefi Google Maps'te açabilirsiniz.</p>
+  <h2>selmantag</h2>
+  <p class="muted">Adres önerilerini seçebilir ve sonucu Google Maps'te açabilirsiniz.</p>
 
   <label>Kullanıcının gitmek istediği adres</label>
-  <input id="hedef" type="text" list="adresOnerileri" placeholder="örn Isparta Otogar" autocomplete="off">
-  <datalist id="adresOnerileri"></datalist>
+  <input id="hedef" type="text" placeholder="örn Isparta Iyaşpark AVM" autocomplete="off">
+  <div id="oneriler" class="list" hidden></div>
 
   <div class="row">
     <button id="hesaplaBtn" onclick="hesapla()">Hesapla</button>
@@ -80,38 +84,67 @@ async function benzinGetir() {
       const r = await fetch(url);
       if (!r.ok) continue;
       const html = await r.text();
-
       const satir = /Kurşunsuz\s*Benzin\s*95\s*\(?\s*Ultra\s*Force\s*95\s*\)?/i;
       const fiyat = /(\d{1,3}[.,]\d{2})\s*(?:TL|₺)/g;
-
       const idx = html.search(satir);
       if (idx < 0) continue;
       const parcasi = html.slice(Math.max(0, idx - 2500), idx + 3000);
       const m = [...parcasi.matchAll(fiyat)];
       if (!m.length) continue;
-
       return Number(m[0][1].replace(",", "."));
     } catch {
       // sonraki kaynak
     }
   }
-
   return YEDEK_BENZIN;
 }
 
-async function adresOnerisiGetir(sorgu) {
-  if (sorgu.length < 3) {
-    document.getElementById("adresOnerileri").innerHTML = "";
+function onerileriBastir(adresler) {
+  const box = document.getElementById("oneriler");
+  if (!adresler.length) {
+    box.hidden = true;
+    box.innerHTML = "";
     return;
   }
 
-  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=${encodeURIComponent(sorgu)}`;
-  const r = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!r.ok) return;
-  const list = await r.json();
+  box.innerHTML = adresler.map((adres) => `<button type=\"button\" data-adres=\"${adres.replace(/"/g, "&quot;")}\">${adres}</button>`).join("");
+  box.hidden = false;
+}
 
-  const html = list.map((x) => `<option value="${x.display_name.replace(/"/g, "&quot;")}"></option>`).join("");
-  document.getElementById("adresOnerileri").innerHTML = html;
+async function googleSuggestGetir(sorgu) {
+  const rawUrl = `https://suggestqueries.google.com/complete/search?client=firefox&hl=tr&q=${encodeURIComponent(sorgu)}`;
+  const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`;
+  const r = await fetch(proxy);
+  if (!r.ok) return [];
+  const data = await r.json();
+  const arr = Array.isArray(data?.[1]) ? data[1] : [];
+  return arr.filter(Boolean).map((x) => String(x));
+}
+
+async function nominatimOneriGetir(sorgu) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(sorgu)}`;
+  const r = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!r.ok) return [];
+  const list = await r.json();
+  return list.map((x) => x.display_name).filter(Boolean);
+}
+
+async function adresOnerisiGetir(sorgu) {
+  if (sorgu.length < 3) return onerileriBastir([]);
+
+  const [g, n1, n2] = await Promise.all([
+    googleSuggestGetir(sorgu),
+    nominatimOneriGetir(sorgu),
+    nominatimOneriGetir(`${sorgu}, Isparta`)
+  ]);
+
+  const birlesik = [...g, ...n1, ...n2]
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .map((x) => /isparta/i.test(x) ? x : `${x}, Isparta`);
+
+  const uniq = [...new Set(birlesik)].slice(0, 8);
+  onerileriBastir(uniq);
 }
 
 function hedefiGoogleMapsteAc() {
@@ -149,8 +182,7 @@ async function hesapla() {
     yaz(
       `benzin (Kurşunsuz Benzin 95 / Ultra Force 95): <b>${benzin.toFixed(2)} TL</b><br>` +
       `evuzaklik (kullanıcı konumu → Akkent TOKİ): <b>${evuzaklik.toFixed(2)} km</b><br>` +
-      `toplamuzaklik (kullanıcı konumu → hedef + hedef → Akkent TOKİ): <b>${toplamuzaklik.toFixed(2)} km</b><br><br>` +
-      `<small>Hedef Google Maps yön tarifi hazırlandı.</small>`
+      `toplamuzaklik (kullanıcı konumu → hedef + hedef → Akkent TOKİ): <b>${toplamuzaklik.toFixed(2)} km</b>`
     );
   } catch (e) {
     yaz(`Hata: ${e.message}`);
@@ -162,8 +194,15 @@ async function hesapla() {
 document.getElementById("hedef").addEventListener("input", (e) => {
   clearTimeout(autocompleteTimer);
   autocompleteTimer = setTimeout(() => {
-    adresOnerisiGetir(e.target.value.trim()).catch(() => {});
+    adresOnerisiGetir(e.target.value.trim()).catch(() => onerileriBastir([]));
   }, 300);
+});
+
+document.getElementById("oneriler").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-adres]");
+  if (!btn) return;
+  document.getElementById("hedef").value = btn.dataset.adres;
+  onerileriBastir([]);
 });
 </script>
 </body>
