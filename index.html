@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>selmantag</title>
   <style>
-    body { font-family: system-ui, Arial; max-width: 620px; margin: 24px auto; padding: 0 12px; }
+    body { font-family: system-ui, Arial; max-width: 640px; margin: 24px auto; padding: 0 12px; }
     input, button { width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; }
     button { cursor: pointer; }
     .card { border: 1px solid #ddd; border-radius: 12px; padding: 12px; margin-top: 12px; }
     .muted { color: #666; font-size: 14px; margin: 6px 0 10px; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .list { border: 1px solid #ddd; border-radius: 10px; max-height: 190px; overflow-y: auto; margin-top: -4px; }
+    .list { border: 1px solid #ddd; border-radius: 10px; max-height: 170px; overflow-y: auto; margin-top: -4px; }
     .list button { text-align: left; background: #fff; border: 0; border-bottom: 1px solid #eee; margin: 0; border-radius: 0; }
     .list button:last-child { border-bottom: 0; }
     .list button:hover { background: #f6f8ff; }
@@ -19,14 +19,15 @@
 </head>
 <body>
   <h2>selmantag</h2>
-  <p class="muted">Konum izni vermezseniz "Başlangıç adresi" girin. Hedef için listeden seçim yapın.</p>
+  <p class="muted">Başlangıç ve hedef için öneri listesi gelir. Konum erişilemezse tekrar konum izni istenir.</p>
 
-  <label>Başlangıç adresi (opsiyonel - konum izni yoksa gerekli)</label>
+  <label>Başlangıç adresi (boş bırakırsanız konum kullanılır)</label>
   <input id="baslangic" type="text" placeholder="örn Isparta Merkez" autocomplete="off">
+  <div id="onerilerBaslangic" class="list" hidden></div>
 
-  <label>Kullanıcının gitmek istediği adres</label>
+  <label>Gitmek istediğiniz adres</label>
   <input id="hedef" type="text" placeholder="örn Isparta Iyaşpark AVM" autocomplete="off">
-  <div id="oneriler" class="list" hidden></div>
+  <div id="onerilerHedef" class="list" hidden></div>
 
   <div class="row">
     <button id="hesaplaBtn" onclick="hesapla()">Hesapla</button>
@@ -39,16 +40,24 @@
 const AKKENT_TOKI_ADRESI = "Akkent TOKİ, Isparta";
 const OPET_URL = "https://www.opet.com.tr/akaryakit-fiyatlari/isparta";
 const YEDEK_BENZIN = 59.23;
+const YUZKM_LT = 5.8;
+const KM_LT = YUZKM_LT / 100;
+const coordCache = new Map();
+
 let hedefMapsLinki = "";
-let autocompleteTimer;
+let timerBaslangic;
+let timerHedef;
+let seciliBaslangic = null;
 let seciliHedef = null;
 
 function yaz(metin) {
   document.getElementById("sonuc").innerHTML = metin;
 }
 
-function bekle(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function timeoutFetch(url, options = {}, ms = 7000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(t));
 }
 
 function geolocBirKere() {
@@ -57,7 +66,7 @@ function geolocBirKere() {
     navigator.geolocation.getCurrentPosition(
       (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
       () => reject(new Error("Konum alınamadı")),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 9000, maximumAge: 0 }
     );
   });
 }
@@ -66,7 +75,7 @@ async function geolocAlTekrarli() {
   try {
     return await geolocBirKere();
   } catch {
-    await bekle(400);
+    yaz("Konum alınamadı, tekrar isteniyor...");
     return geolocBirKere();
   }
 }
@@ -74,31 +83,36 @@ async function geolocAlTekrarli() {
 async function reverseGeocode(lat, lon) {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
-    const r = await fetch(url, { headers: { Accept: "application/json" } });
-    if (!r.ok) throw new Error("reverse fail");
+    const r = await timeoutFetch(url, { headers: { Accept: "application/json" } }, 5000);
+    if (!r.ok) throw new Error();
     const d = await r.json();
-    return d?.display_name || "Isparta";
+    return d?.display_name || `${lat},${lon}`;
   } catch {
-    return "Isparta";
+    return `${lat},${lon}`;
   }
 }
 
 async function adresAra(adres, limit = 1) {
   const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=${limit}&countrycodes=tr&q=${encodeURIComponent(adres)}`;
-  const r = await fetch(url, { headers: { Accept: "application/json" } });
+  const r = await timeoutFetch(url, { headers: { Accept: "application/json" } }, 6000);
   if (!r.ok) throw new Error(`Adres bulunamadı: ${adres}`);
   return await r.json();
 }
 
 async function adresToCoord(adres) {
+  const key = adres.trim().toLowerCase();
+  if (coordCache.has(key)) return coordCache.get(key);
+
   const list = await adresAra(adres, 1);
   if (!Array.isArray(list) || !list.length) throw new Error(`Adres bulunamadı: ${adres}`);
-  return { lat: Number(list[0].lat), lon: Number(list[0].lon), ad: list[0].display_name };
+  const value = { lat: Number(list[0].lat), lon: Number(list[0].lon), ad: list[0].display_name };
+  coordCache.set(key, value);
+  return value;
 }
 
 async function rotaKm(a, b) {
   const url = `https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=false`;
-  const r = await fetch(url);
+  const r = await timeoutFetch(url, {}, 6000);
   if (!r.ok) throw new Error("Mesafe servisine ulaşılamadı");
   const d = await r.json();
   const metre = d?.routes?.[0]?.distance;
@@ -114,7 +128,7 @@ async function benzinGetir() {
 
   for (const url of kaynaklar) {
     try {
-      const r = await fetch(url);
+      const r = await timeoutFetch(url, {}, 4500);
       if (!r.ok) continue;
       const html = await r.text();
       const satir = /Kurşunsuz\s*Benzin\s*95\s*\(?\s*Ultra\s*Force\s*95\s*\)?/i;
@@ -130,21 +144,20 @@ async function benzinGetir() {
   return YEDEK_BENZIN;
 }
 
-function onerileriBastir(items) {
-  const box = document.getElementById("oneriler");
+function onerileriBastir(listId, items) {
+  const box = document.getElementById(listId);
   if (!items.length) {
     box.hidden = true;
     box.innerHTML = "";
     return;
   }
-
   box.innerHTML = items.map((x, i) => (`<button type="button" data-idx="${i}">${x.ad}</button>`)).join("");
   box.dataset.items = JSON.stringify(items);
   box.hidden = false;
 }
 
-async function adresOnerisiGetir(sorgu) {
-  if (sorgu.length < 3) return onerileriBastir([]);
+async function adresOnerisiGetir(sorgu, listId) {
+  if (sorgu.length < 3) return onerileriBastir(listId, []);
 
   const [a, b] = await Promise.all([
     adresAra(sorgu, 6).catch(() => []),
@@ -164,7 +177,7 @@ async function adresOnerisiGetir(sorgu) {
     if (uniq.length >= 8) break;
   }
 
-  onerileriBastir(uniq);
+  onerileriBastir(listId, uniq);
 }
 
 function hedefiGoogleMapsteAc() {
@@ -174,22 +187,34 @@ function hedefiGoogleMapsteAc() {
 
 async function kullaniciKonumuGetir() {
   const manuel = document.getElementById("baslangic").value.trim();
-  if (manuel) return adresToCoord(manuel);
+  if (manuel) return seciliBaslangic || adresToCoord(manuel);
 
   try {
     const g = await geolocAlTekrarli();
     const ad = await reverseGeocode(g.lat, g.lon);
     return { lat: g.lat, lon: g.lon, ad };
   } catch {
-    throw new Error("Konum alınamadı. Lütfen konum iznini tekrar verin; olmazsa Başlangıç adresi yazın.");
+    throw new Error("Konum alınamadı. Lütfen konum iznini açıp tekrar deneyin veya başlangıç adresi girin.");
   }
+}
+
+function hesaplaToplamTutar(kmyol, benzin) {
+  const toplamyakit = kmyol * KM_LT;
+  let toplamtutar = toplamyakit * benzin;
+  const sure = kmyol * 1.2;
+
+  if (sure < 10) toplamtutar += sure * 1.5 + 20;
+  else if (sure < 20) toplamtutar += sure * 2;
+  else if (sure < 30) toplamtutar += sure * 2.3;
+  else toplamtutar += sure * 2.5;
+
+  return toplamtutar;
 }
 
 async function hesapla() {
   const hedefText = document.getElementById("hedef").value.trim();
   const btn = document.getElementById("hesaplaBtn");
   const mapsBtn = document.getElementById("mapsBtn");
-
   if (!hedefText) return yaz("Lütfen gitmek istediğiniz adresi yazın");
 
   btn.disabled = true;
@@ -198,27 +223,27 @@ async function hesapla() {
   yaz("Hesaplanıyor...");
 
   try {
-    const hedefCoord = seciliHedef || await adresToCoord(hedefText);
-
-    const [benzin, user, akkent] = await Promise.all([
+    const [benzin, user, akkent, hedefCoord] = await Promise.all([
       benzinGetir(),
       kullaniciKonumuGetir(),
-      adresToCoord(AKKENT_TOKI_ADRESI)
+      adresToCoord(AKKENT_TOKI_ADRESI),
+      Promise.resolve(seciliHedef).then((x) => x || adresToCoord(hedefText))
     ]);
 
-    const evuzaklik = await rotaKm(user, akkent);
-    const userToHedef = await rotaKm(user, hedefCoord);
-    const hedefToAkkent = await rotaKm(hedefCoord, akkent);
+    const [evuzaklik, userToHedef, hedefToAkkent] = await Promise.all([
+      rotaKm(user, akkent),
+      rotaKm(user, hedefCoord),
+      rotaKm(hedefCoord, akkent)
+    ]);
+
     const toplamuzaklik = userToHedef + hedefToAkkent;
+    const kmyol = Math.max(0, toplamuzaklik - evuzaklik);
+    const toplamtutar = hesaplaToplamTutar(kmyol, benzin);
 
     hedefMapsLinki = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(user.ad)}&destination=${encodeURIComponent(hedefCoord.ad || hedefText)}`;
     mapsBtn.disabled = false;
 
-    yaz(
-      `benzin (Kurşunsuz Benzin 95 / Ultra Force 95): <b>${benzin.toFixed(2)} TL</b><br>` +
-      `evuzaklik (kullanıcı konumu → Akkent TOKİ): <b>${evuzaklik.toFixed(2)} km</b><br>` +
-      `toplamuzaklik (kullanıcı konumu → hedef + hedef → Akkent TOKİ): <b>${toplamuzaklik.toFixed(2)} km</b>`
-    );
+    yaz(`Toplam Tutar: <b>${toplamtutar.toFixed(2)} TL</b>`);
   } catch (e) {
     yaz(`Hata: ${e.message}`);
   } finally {
@@ -226,25 +251,42 @@ async function hesapla() {
   }
 }
 
-document.getElementById("hedef").addEventListener("input", (e) => {
-  seciliHedef = null;
-  clearTimeout(autocompleteTimer);
-  autocompleteTimer = setTimeout(() => {
-    adresOnerisiGetir(e.target.value.trim()).catch(() => onerileriBastir([]));
-  }, 250);
+document.getElementById("baslangic").addEventListener("input", (e) => {
+  seciliBaslangic = null;
+  clearTimeout(timerBaslangic);
+  timerBaslangic = setTimeout(() => {
+    adresOnerisiGetir(e.target.value.trim(), "onerilerBaslangic").catch(() => onerileriBastir("onerilerBaslangic", []));
+  }, 200);
 });
 
-document.getElementById("oneriler").addEventListener("click", (e) => {
+document.getElementById("hedef").addEventListener("input", (e) => {
+  seciliHedef = null;
+  clearTimeout(timerHedef);
+  timerHedef = setTimeout(() => {
+    adresOnerisiGetir(e.target.value.trim(), "onerilerHedef").catch(() => onerileriBastir("onerilerHedef", []));
+  }, 200);
+});
+
+document.getElementById("onerilerBaslangic").addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-idx]");
   if (!btn) return;
-
-  const items = JSON.parse(document.getElementById("oneriler").dataset.items || "[]");
+  const items = JSON.parse(document.getElementById("onerilerBaslangic").dataset.items || "[]");
   const secim = items[Number(btn.dataset.idx)];
   if (!secim) return;
+  seciliBaslangic = secim;
+  document.getElementById("baslangic").value = secim.ad;
+  onerileriBastir("onerilerBaslangic", []);
+});
 
+document.getElementById("onerilerHedef").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-idx]");
+  if (!btn) return;
+  const items = JSON.parse(document.getElementById("onerilerHedef").dataset.items || "[]");
+  const secim = items[Number(btn.dataset.idx)];
+  if (!secim) return;
   seciliHedef = secim;
   document.getElementById("hedef").value = secim.ad;
-  onerileriBastir([]);
+  onerileriBastir("onerilerHedef", []);
 });
 </script>
 </body>
