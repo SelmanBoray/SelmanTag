@@ -34,6 +34,18 @@
     <button id="mapsBtn" onclick="hedefiGoogleMapsteAc()" disabled>Google Maps'te Aç</button>
   </div>
 
+
+  <div class="card">
+    <h3>KM ile Hızlı Hesap</h3>
+    <label>Eve uzaklık (km)</label>
+    <input id="ev" type="number" step="0.01" placeholder="örn 5">
+
+    <label>Toplam uzaklık (km)</label>
+    <input id="toplam" type="number" step="0.01" placeholder="örn 20">
+
+    <button onclick="hesaplaKm()">KM ile Hesapla</button>
+  </div>
+
   <div class="card" id="sonuc">Sonuç burada görünecek</div>
 
 <script>
@@ -209,6 +221,30 @@ function hesaplaToplamTutar(kmyol, benzin) {
   else toplamtutar += sure * 2.5;
 
   return toplamtutar;
+}
+
+
+function hesaplaKm() {
+  const evuzaklik = Number(document.getElementById("ev").value);
+  const toplamuzaklik = Number(document.getElementById("toplam").value);
+
+  if (!Number.isFinite(evuzaklik) || !Number.isFinite(toplamuzaklik)) {
+    yaz("Lütfen eve uzaklık ve toplam uzaklık alanlarını sayı girin.");
+    return;
+  }
+
+  if (toplamuzaklik < evuzaklik) {
+    yaz("Toplam uzaklık, eve uzaklıktan küçük olamaz.");
+    return;
+  }
+
+  benzinGetir().then((benzin) => {
+    const kmyol = Math.max(0, toplamuzaklik - evuzaklik);
+    const toplamtutar = hesaplaToplamTutar(kmyol, benzin);
+    yaz(`Toplam Tutar: <b>${toplamtutar.toFixed(2)} TL</b>`);
+  }).catch((e) => {
+    yaz(`Hata: ${e.message}`);
+  });
 }
 
 async function hesapla() {
