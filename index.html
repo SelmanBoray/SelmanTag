@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Yol Hesaplayıcı</title>
+  <style>
+    body { font-family: system-ui, Arial; max-width: 520px; margin: 24px auto; padding: 0 12px; }
+    input, button { width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; }
+    button { cursor: pointer; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 12px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <h2>Yol Hesaplayıcı</h2>
+
+  <label>Eve uzaklık (km)</label>
+  <input id="ev" type="number" step="0.01" placeholder="örn 5">
+
+  <label>Toplam uzaklık (km)</label>
+  <input id="toplam" type="number" step="0.01" placeholder="örn 20">
+
+  <button onclick="hesapla()">Hesapla</button>
+
+  <div class="card" id="sonuc">Sonuç burada görünecek</div>
+
+<script>
+function hesapla() {
+  const yuzkmlt = 5.8;
+  const kmlt = yuzkmlt / 100;
+  const benzin = 59.23;
+
+  const evuzaklik = Number(document.getElementById("ev").value);
+  const toplamuzaklik = Number(document.getElementById("toplam").value);
+
+  if (!Number.isFinite(evuzaklik) || !Number.isFinite(toplamuzaklik)) {
+    document.getElementById("sonuc").innerText = "Lütfen iki alanı da sayı olarak gir";
+    return;
+  }
+  if (toplamuzaklik < evuzaklik) {
+    document.getElementById("sonuc").innerText = "Toplam uzaklık, eve uzaklıktan küçük olamaz";
+    return;
+  }
+
+  const kmyol = toplamuzaklik - evuzaklik;
+
+  const toplamyakit = kmyol * kmlt;
+  let toplamtutar = toplamyakit * benzin;
+
+  const sure = kmyol * 1.2;
+
+  if (sure < 10) {
+    toplamtutar += sure * 1.5 + 20;
+  } else if (sure < 20) {
+    toplamtutar += sure * 2;
+  } else if (sure < 30) {
+    toplamtutar += sure * 2.3;
+  } else {
+    toplamtutar += sure * 2.5;
+  }
+
+  document.getElementById("sonuc").innerHTML =
+    `Toplam Ödeme (TL): <b>${toplamtutar.toFixed(2)}</b>`;
+}
+</script>
+</body>
+</html>
