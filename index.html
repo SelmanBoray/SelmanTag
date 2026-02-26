@@ -47,15 +47,40 @@ function yaz(metin) {
   document.getElementById("sonuc").innerHTML = metin;
 }
 
-function geolocAl() {
+function bekle(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function geolocBirKere() {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error("Tarayıcı konum özelliğini desteklemiyor"));
     navigator.geolocation.getCurrentPosition(
       (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
       () => reject(new Error("Konum alınamadı")),
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   });
+}
+
+async function geolocAlTekrarli() {
+  try {
+    return await geolocBirKere();
+  } catch {
+    await bekle(400);
+    return geolocBirKere();
+  }
+}
+
+async function reverseGeocode(lat, lon) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
+    const r = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!r.ok) throw new Error("reverse fail");
+    const d = await r.json();
+    return d?.display_name || "Isparta";
+  } catch {
+    return "Isparta";
+  }
 }
 
 async function adresAra(adres, limit = 1) {
@@ -113,10 +138,7 @@ function onerileriBastir(items) {
     return;
   }
 
-  box.innerHTML = items.map((x, i) => (
-    `<button type="button" data-idx="${i}">${x.ad}</button>`
-  )).join("");
-
+  box.innerHTML = items.map((x, i) => (`<button type="button" data-idx="${i}">${x.ad}</button>`)).join("");
   box.dataset.items = JSON.stringify(items);
   box.hidden = false;
 }
@@ -155,10 +177,11 @@ async function kullaniciKonumuGetir() {
   if (manuel) return adresToCoord(manuel);
 
   try {
-    const g = await geolocAl();
-    return { lat: g.lat, lon: g.lon, ad: `${g.lat},${g.lon}` };
+    const g = await geolocAlTekrarli();
+    const ad = await reverseGeocode(g.lat, g.lon);
+    return { lat: g.lat, lon: g.lon, ad };
   } catch {
-    throw new Error("Konum alınamadı. Başlangıç adresi girin veya konum izni verin.");
+    throw new Error("Konum alınamadı. Lütfen konum iznini tekrar verin; olmazsa Başlangıç adresi yazın.");
   }
 }
 
