@@ -5,25 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Yol Hesaplayıcı</title>
   <style>
-    body { font-family: system-ui, Arial; max-width: 620px; margin: 24px auto; padding: 0 12px; }
+    body { font-family: system-ui, Arial; max-width: 560px; margin: 24px auto; padding: 0 12px; }
     input, button { width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; }
     button { cursor: pointer; }
     .card { border: 1px solid #ddd; border-radius: 12px; padding: 12px; margin-top: 12px; }
     .muted { color: #666; font-size: 14px; margin: 6px 0 10px; }
-    small { color: #666; }
   </style>
 </head>
 <body>
   <h2>Yol Hesaplayıcı</h2>
-  <p class="muted">
-    Kullanıcı konumu + hedef adres + Akkent TOKİ rotasıyla hesaplar.
-    Konum izni veremezseniz "Konumunuz (adres)" alanını doldurun.
-  </p>
+  <p class="muted">Sadece istenen 3 değer hesaplanır: benzin, evuzaklik, toplamuzaklik.</p>
 
-  <label>Konumunuz (adres) - opsiyonel</label>
-  <input id="konumAdres" type="text" placeholder="örn Isparta Merkez">
-
-  <label>Gitmek istediğiniz adres</label>
+  <label>Kullanıcının gitmek istediği adres</label>
   <input id="hedef" type="text" placeholder="örn Isparta Otogar">
 
   <button id="hesaplaBtn" onclick="hesapla()">Hesapla</button>
@@ -32,161 +25,102 @@
 
 <script>
 const AKKENT_TOKI_ADRESI = "Akkent TOKİ, Isparta";
-const OPET_ISPARTA_URL = "https://www.opet.com.tr/akaryakit-fiyatlari/isparta";
-const BENZIN_YEDEK_FIYAT = 59.23;
+const OPET_URL = "https://www.opet.com.tr/akaryakit-fiyatlari/isparta";
+const YEDEK_BENZIN = 59.23;
 
 function yaz(metin) {
   document.getElementById("sonuc").innerHTML = metin;
 }
 
-function dereceyiRadyanaCevir(d) {
-  return d * Math.PI / 180;
-}
-
-function kusUcusuKm(n1, n2) {
-  const R = 6371;
-  const dLat = dereceyiRadyanaCevir(n2.lat - n1.lat);
-  const dLon = dereceyiRadyanaCevir(n2.lon - n1.lon);
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(dereceyiRadyanaCevir(n1.lat)) * Math.cos(dereceyiRadyanaCevir(n2.lat)) *
-    Math.sin(dLon / 2) ** 2;
-  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-}
-
-function konumuAl() {
+function geolocAl() {
   return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error("Tarayıcı konum özelliğini desteklemiyor."));
-      return;
-    }
-
+    if (!navigator.geolocation) return reject(new Error("Tarayıcı konum özelliğini desteklemiyor"));
     navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-      () => reject(new Error("Konum alınamadı. Konum izni verdiğinizden emin olun.")),
+      (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
+      () => reject(new Error("Konum alınamadı. Konum izni verin.")),
       { enableHighAccuracy: true, timeout: 12000 }
     );
   });
 }
 
-async function adresiKoordinataCevir(adres) {
+async function adresToCoord(adres) {
   const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(adres)}`;
-  const res = await fetch(url, { headers: { "Accept": "application/json" } });
-  if (!res.ok) throw new Error(`Adres bulunamadı: ${adres}`);
-
-  const data = await res.json();
-  if (!Array.isArray(data) || data.length === 0) {
-    throw new Error(`Adres bulunamadı: ${adres}`);
-  }
-
-  return { lat: Number(data[0].lat), lon: Number(data[0].lon), displayName: data[0].display_name };
+  const r = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!r.ok) throw new Error(`Adres bulunamadı: ${adres}`);
+  const d = await r.json();
+  if (!Array.isArray(d) || !d.length) throw new Error(`Adres bulunamadı: ${adres}`);
+  return { lat: Number(d[0].lat), lon: Number(d[0].lon) };
 }
 
-async function rotaUzakligiKm(nokta1, nokta2) {
-  try {
-    const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${nokta1.lon},${nokta1.lat};${nokta2.lon},${nokta2.lat}?overview=false`;
-    const res = await fetch(osrmUrl);
-    if (!res.ok) throw new Error("OSRM hatası");
-
-    const data = await res.json();
-    const metre = data?.routes?.[0]?.distance;
-    if (!Number.isFinite(metre)) throw new Error("OSRM veri hatası");
-    return { km: metre / 1000, tip: "rota" };
-  } catch {
-    return { km: kusUcusuKm(nokta1, nokta2), tip: "kuş uçuşu" };
-  }
+async function rotaKm(a, b) {
+  const url = `https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=false`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("Mesafe servisine ulaşılamadı");
+  const d = await r.json();
+  const metre = d?.routes?.[0]?.distance;
+  if (!Number.isFinite(metre)) throw new Error("Mesafe hesaplanamadı");
+  return metre / 1000;
 }
 
-async function benzinFiyatiGetir() {
-  try {
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(OPET_ISPARTA_URL)}`;
-    const res = await fetch(proxyUrl);
-    if (!res.ok) throw new Error("Opet sayfası çekilemedi");
+async function benzinGetir() {
+  const kaynaklar = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(OPET_URL)}`,
+    `https://r.jina.ai/http://www.opet.com.tr/akaryakit-fiyatlari/isparta`
+  ];
 
-    const html = await res.text();
-    const label = /Kurşunsuz\s*Benzin\s*95\s*\(?\s*Ultra\s*Force\s*95\s*\)?/i;
-    if (!label.test(html)) throw new Error("Aranan sütun bulunamadı.");
+  for (const url of kaynaklar) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) continue;
+      const html = await r.text();
 
-    const etraf = html.slice(Math.max(0, html.search(label) - 1500), html.search(label) + 2500);
-    const fiyatRegex = /(\d{1,3}[.,]\d{2})\s*(?:TL|₺)/g;
-    const eslesmeler = [...etraf.matchAll(fiyatRegex)];
-    if (!eslesmeler.length) throw new Error("Fiyat değeri okunamadı.");
+      const satir = /Kurşunsuz\s*Benzin\s*95\s*\(?\s*Ultra\s*Force\s*95\s*\)?/i;
+      const fiyat = /(\d{1,3}[.,]\d{2})\s*(?:TL|₺)/g;
 
-    return { fiyat: Number(eslesmeler[0][1].replace(",", ".")), kaynak: "Opet Isparta" };
-  } catch {
-    return { fiyat: BENZIN_YEDEK_FIYAT, kaynak: "Yedek fiyat" };
-  }
-}
+      const idx = html.search(satir);
+      if (idx < 0) continue;
+      const parcasi = html.slice(Math.max(0, idx - 2500), idx + 3000);
+      const m = [...parcasi.matchAll(fiyat)];
+      if (!m.length) continue;
 
-async function kullaniciKonumuGetir() {
-  const manuelAdres = document.getElementById("konumAdres").value.trim();
-
-  if (manuelAdres) {
-    const nokta = await adresiKoordinataCevir(manuelAdres);
-    return { ...nokta, kaynak: "Manuel adres" };
+      return Number(m[0][1].replace(",", "."));
+    } catch {
+      // sonraki kaynağı dene
+    }
   }
 
-  try {
-    const nokta = await konumuAl();
-    return { ...nokta, kaynak: "Tarayıcı konumu" };
-  } catch {
-    throw new Error("Konum alınamadı. Konum izni verin veya 'Konumunuz (adres)' alanını doldurun.");
-  }
+  return YEDEK_BENZIN;
 }
 
 async function hesapla() {
-  const btn = document.getElementById("hesaplaBtn");
   const hedef = document.getElementById("hedef").value.trim();
-
-  if (!hedef) {
-    yaz("Lütfen gitmek istediğiniz adresi girin.");
-    return;
-  }
+  const btn = document.getElementById("hesaplaBtn");
+  if (!hedef) return yaz("Lütfen gitmek istediğiniz adresi yazın");
 
   btn.disabled = true;
   yaz("Hesaplanıyor...");
 
   try {
-    const yuzkmlt = 5.8;
-    const kmlt = yuzkmlt / 100;
-
-    const [benzinBilgi, kullaniciKonum, hedefKonum, akkentKonum] = await Promise.all([
-      benzinFiyatiGetir(),
-      kullaniciKonumuGetir(),
-      adresiKoordinataCevir(hedef),
-      adresiKoordinataCevir(AKKENT_TOKI_ADRESI)
+    const [benzin, user, hedefCoord, akkent] = await Promise.all([
+      benzinGetir(),
+      geolocAl(),
+      adresToCoord(hedef),
+      adresToCoord(AKKENT_TOKI_ADRESI)
     ]);
 
-    const evMesafe = await rotaUzakligiKm(kullaniciKonum, akkentKonum);
-    const kullaniciHedefMesafe = await rotaUzakligiKm(kullaniciKonum, hedefKonum);
-    const hedefAkkentMesafe = await rotaUzakligiKm(hedefKonum, akkentKonum);
-
-    const evuzaklik = evMesafe.km;
-    const toplamuzaklik = kullaniciHedefMesafe.km + hedefAkkentMesafe.km;
-
-    const kmyol = Math.max(0, toplamuzaklik - evuzaklik);
-    const toplamyakit = kmyol * kmlt;
-    let toplamtutar = toplamyakit * benzinBilgi.fiyat;
-
-    const sure = kmyol * 1.2;
-    if (sure < 10) toplamtutar += sure * 1.5 + 20;
-    else if (sure < 20) toplamtutar += sure * 2;
-    else if (sure < 30) toplamtutar += sure * 2.3;
-    else toplamtutar += sure * 2.5;
+    const evuzaklik = await rotaKm(user, akkent);
+    const userToHedef = await rotaKm(user, hedefCoord);
+    const hedefToAkkent = await rotaKm(hedefCoord, akkent);
+    const toplamuzaklik = userToHedef + hedefToAkkent;
 
     yaz(
-      `Benzin fiyatı (${benzinBilgi.kaynak}): <b>${benzinBilgi.fiyat.toFixed(2)} TL</b><br>` +
-      `Konum kaynağı: <b>${kullaniciKonum.kaynak}</b><br>` +
-      `Ev uzaklık (Konumunuz → Akkent TOKİ): <b>${evuzaklik.toFixed(2)} km</b> <small>(${evMesafe.tip})</small><br>` +
-      `Toplam uzaklık (Konumunuz → Hedef + Hedef → Akkent TOKİ): <b>${toplamuzaklik.toFixed(2)} km</b> ` +
-      `<small>(${kullaniciHedefMesafe.tip} + ${hedefAkkentMesafe.tip})</small><br><br>` +
-      `Toplam Ödeme (TL): <b>${toplamtutar.toFixed(2)}</b><br><br>` +
-      `<small>Google Maps açmak için: ` +
-      `<a target="_blank" href="https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${kullaniciKonum.lat},${kullaniciKonum.lon}`)}&destination=${encodeURIComponent(AKKENT_TOKI_ADRESI)}">Konum→Akkent</a> | ` +
-      `<a target="_blank" href="https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${kullaniciKonum.lat},${kullaniciKonum.lon}`)}&destination=${encodeURIComponent(hedef)}">Konum→Hedef</a> | ` +
-      `<a target="_blank" href="https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(hedef)}&destination=${encodeURIComponent(AKKENT_TOKI_ADRESI)}">Hedef→Akkent</a></small>`
+      `benzin (Kurşunsuz Benzin 95 / Ultra Force 95): <b>${benzin.toFixed(2)} TL</b><br>` +
+      `evuzaklik (kullanıcı konumu → Akkent TOKİ): <b>${evuzaklik.toFixed(2)} km</b><br>` +
+      `toplamuzaklik (kullanıcı konumu → hedef + hedef → Akkent TOKİ): <b>${toplamuzaklik.toFixed(2)} km</b><br><br>` +
+      `<small>Google Maps kontrol: <a target="_blank" href="https://www.google.com/maps/search/${encodeURIComponent(AKKENT_TOKI_ADRESI)}">Akkent TOKİ</a></small>`
     );
-  } catch (err) {
-    yaz(`Hata: ${err.message}`);
+  } catch (e) {
+    yaz(`Hata: ${e.message}`);
   } finally {
     btn.disabled = false;
   }
