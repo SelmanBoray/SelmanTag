@@ -1,67 +1,225 @@
-<!doctype html>
-<html lang="tr">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Yol Hesaplayıcı</title>
-  <style>
-    body { font-family: system-ui, Arial; max-width: 520px; margin: 24px auto; padding: 0 12px; }
-    input, button { width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; }
-    button { cursor: pointer; }
-    .card { border: 1px solid #ddd; border-radius: 12px; padding: 12px; margin-top: 12px; }
-  </style>
-</head>
-<body>
-  <h2>Yol Hesaplayıcı</h2>
-
-  <label>Eve uzaklık (km)</label>
-  <input id="ev" type="number" step="0.01" placeholder="örn 5">
-
-  <label>Toplam uzaklık (km)</label>
-  <input id="toplam" type="number" step="0.01" placeholder="örn 20">
-
-  <button onclick="hesapla()">Hesapla</button>
-
-  <div class="card" id="sonuc">Sonuç burada görünecek</div>
-
-<script>
-function hesapla() {
-  const yuzkmlt = 5.8;
-  const kmlt = yuzkmlt / 100;
-  const benzin = 59.23;
-
-  const evuzaklik = Number(document.getElementById("ev").value);
-  const toplamuzaklik = Number(document.getElementById("toplam").value);
-
-  if (!Number.isFinite(evuzaklik) || !Number.isFinite(toplamuzaklik)) {
-    document.getElementById("sonuc").innerText = "Lütfen iki alanı da sayı olarak gir";
-    return;
-  }
-  if (toplamuzaklik < evuzaklik) {
-    document.getElementById("sonuc").innerText = "Toplam uzaklık, eve uzaklıktan küçük olamaz";
-    return;
-  }
-
-  const kmyol = toplamuzaklik - evuzaklik;
-
-  const toplamyakit = kmyol * kmlt;
-  let toplamtutar = toplamyakit * benzin;
-
-  const sure = kmyol * 1.2;
-
-  if (sure < 10) {
-    toplamtutar += sure * 1.5 + 20;
-  } else if (sure < 20) {
-    toplamtutar += sure * 2;
-  } else if (sure < 30) {
-    toplamtutar += sure * 2.3;
-  } else {
-    toplamtutar += sure * 2.5;
-  }
-
-  document.getElementById("sonuc").innerHTML =
-    `Toplam Ödeme (TL): <b>${toplamtutar.toFixed(2)}</b>`;
-}
-</script>
-</body>
-</html>
+diff --git a/index.html b/index.html
+index cba2cb1d368ebd58b01a85b86d6bc7a34695e532..156b0f35c5e487e84cf9ece80d9d4f0a50ec1f8c 100644
+--- a/index.html
++++ b/index.html
+@@ -1,67 +1,152 @@
+-<!doctype html>
+-<html lang="tr">
+-<head>
+-  <meta charset="utf-8" />
+-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+-  <title>Yol Hesaplayıcı</title>
+-  <style>
+-    body { font-family: system-ui, Arial; max-width: 520px; margin: 24px auto; padding: 0 12px; }
+-    input, button { width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; }
+-    button { cursor: pointer; }
+-    .card { border: 1px solid #ddd; border-radius: 12px; padding: 12px; margin-top: 12px; }
+-  </style>
+-</head>
+-<body>
+-  <h2>Yol Hesaplayıcı</h2>
+-
+-  <label>Eve uzaklık (km)</label>
+-  <input id="ev" type="number" step="0.01" placeholder="örn 5">
+-
+-  <label>Toplam uzaklık (km)</label>
+-  <input id="toplam" type="number" step="0.01" placeholder="örn 20">
+-
+-  <button onclick="hesapla()">Hesapla</button>
+-
+-  <div class="card" id="sonuc">Sonuç burada görünecek</div>
+-
+-<script>
+-function hesapla() {
+-  const yuzkmlt = 5.8;
+-  const kmlt = yuzkmlt / 100;
+-  const benzin = 59.23;
+-
+-  const evuzaklik = Number(document.getElementById("ev").value);
+-  const toplamuzaklik = Number(document.getElementById("toplam").value);
+-
+-  if (!Number.isFinite(evuzaklik) || !Number.isFinite(toplamuzaklik)) {
+-    document.getElementById("sonuc").innerText = "Lütfen iki alanı da sayı olarak gir";
+-    return;
+-  }
+-  if (toplamuzaklik < evuzaklik) {
+-    document.getElementById("sonuc").innerText = "Toplam uzaklık, eve uzaklıktan küçük olamaz";
+-    return;
+-  }
+-
+-  const kmyol = toplamuzaklik - evuzaklik;
+-
+-  const toplamyakit = kmyol * kmlt;
+-  let toplamtutar = toplamyakit * benzin;
+-
+-  const sure = kmyol * 1.2;
+-
+-  if (sure < 10) {
+-    toplamtutar += sure * 1.5 + 20;
+-  } else if (sure < 20) {
+-    toplamtutar += sure * 2;
+-  } else if (sure < 30) {
+-    toplamtutar += sure * 2.3;
+-  } else {
+-    toplamtutar += sure * 2.5;
+-  }
+-
+-  document.getElementById("sonuc").innerHTML =
+-    `Toplam Ödeme (TL): <b>${toplamtutar.toFixed(2)}</b>`;
+-}
+-</script>
+-</body>
+-</html>
+\ No newline at end of file
++<!doctype html>
++<html lang="tr">
++<head>
++  <meta charset="utf-8" />
++  <meta name="viewport" content="width=device-width, initial-scale=1" />
++  <title>Yol Hesaplayıcı</title>
++  <style>
++    body { font-family: system-ui, Arial; max-width: 560px; margin: 24px auto; padding: 0 12px; }
++    input, button { width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; }
++    button { cursor: pointer; }
++    .card { border: 1px solid #ddd; border-radius: 12px; padding: 12px; margin-top: 12px; }
++    .muted { color: #666; font-size: 14px; margin-top: 0; }
++  </style>
++</head>
++<body>
++  <h2>Yol Hesaplayıcı</h2>
++  <p class="muted">Konum izni verin, gitmek istediğiniz adresi yazın.</p>
++
++  <label>Gitmek istediğiniz adres</label>
++  <input id="hedef" type="text" placeholder="örn Isparta Otogar">
++
++  <button id="hesaplaBtn" onclick="hesapla()">Hesapla</button>
++
++  <div class="card" id="sonuc">Sonuç burada görünecek</div>
++
++<script>
++const AKKENT_TOKI_ADRESI = "Akkent TOKİ, Isparta";
++const OPET_ISPARTA_URL = "https://www.opet.com.tr/akaryakit-fiyatlari/isparta";
++const BENZIN_YEDEK_FIYAT = 59.23;
++
++function yaz(metin) {
++  document.getElementById("sonuc").innerHTML = metin;
++}
++
++function konumuAl() {
++  return new Promise((resolve, reject) => {
++    if (!navigator.geolocation) {
++      reject(new Error("Tarayıcı konum özelliğini desteklemiyor."));
++      return;
++    }
++
++    navigator.geolocation.getCurrentPosition(
++      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
++      () => reject(new Error("Konum alınamadı. Konum izni verdiğinizden emin olun.")),
++      { enableHighAccuracy: true, timeout: 12000 }
++    );
++  });
++}
++
++async function adresiKoordinataCevir(adres) {
++  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(adres)}`;
++  const res = await fetch(url, { headers: { "Accept": "application/json" } });
++  if (!res.ok) throw new Error(`Adres bulunamadı: ${adres}`);
++  const data = await res.json();
++  if (!data.length) throw new Error(`Adres bulunamadı: ${adres}`);
++
++  return { lat: Number(data[0].lat), lon: Number(data[0].lon), displayName: data[0].display_name };
++}
++
++async function rotaUzakligiKm(nokta1, nokta2) {
++  const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${nokta1.lon},${nokta1.lat};${nokta2.lon},${nokta2.lat}?overview=false`;
++  const res = await fetch(osrmUrl);
++  if (!res.ok) throw new Error("Uzaklık servisine ulaşılamadı.");
++
++  const data = await res.json();
++  const metre = data?.routes?.[0]?.distance;
++  if (!Number.isFinite(metre)) throw new Error("Rota uzaklığı hesaplanamadı.");
++  return metre / 1000;
++}
++
++async function benzinFiyatiGetir() {
++  try {
++    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(OPET_ISPARTA_URL)}`;
++    const res = await fetch(proxyUrl);
++    if (!res.ok) throw new Error("Opet sayfası çekilemedi");
++
++    const html = await res.text();
++    const label = /Kurşunsuz\s*Benzin\s*95\s*\(?\s*Ultra\s*Force\s*95\s*\)?/i;
++    const fiyatRegex = /(\d{1,3}[.,]\d{2})\s*(?:TL|₺)/g;
++
++    if (!label.test(html)) throw new Error("Aranan sütun bulunamadı.");
++
++    const etraf = html.slice(Math.max(0, html.search(label) - 1500), html.search(label) + 2500);
++    const eslesmeler = [...etraf.matchAll(fiyatRegex)];
++    if (!eslesmeler.length) throw new Error("Fiyat değeri okunamadı.");
++
++    return Number(eslesmeler[0][1].replace(",", "."));
++  } catch {
++    return BENZIN_YEDEK_FIYAT;
++  }
++}
++
++async function hesapla() {
++  const btn = document.getElementById("hesaplaBtn");
++  const hedef = document.getElementById("hedef").value.trim();
++
++  if (!hedef) {
++    yaz("Lütfen gitmek istediğiniz adresi girin.");
++    return;
++  }
++
++  btn.disabled = true;
++  yaz("Hesaplanıyor...");
++
++  try {
++    const yuzkmlt = 5.8;
++    const kmlt = yuzkmlt / 100;
++
++    const [benzin, kullaniciKonum, hedefKonum, akkentKonum] = await Promise.all([
++      benzinFiyatiGetir(),
++      konumuAl(),
++      adresiKoordinataCevir(hedef),
++      adresiKoordinataCevir(AKKENT_TOKI_ADRESI)
++    ]);
++
++    const evuzaklik = await rotaUzakligiKm(kullaniciKonum, akkentKonum);
++    const kullaniciHedef = await rotaUzakligiKm(kullaniciKonum, hedefKonum);
++    const hedefAkkent = await rotaUzakligiKm(hedefKonum, akkentKonum);
++    const toplamuzaklik = kullaniciHedef + hedefAkkent;
++
++    const kmyol = toplamuzaklik - evuzaklik;
++    const toplamyakit = kmyol * kmlt;
++    let toplamtutar = toplamyakit * benzin;
++
++    const sure = kmyol * 1.2;
++
++    if (sure < 10) {
++      toplamtutar += sure * 1.5 + 20;
++    } else if (sure < 20) {
++      toplamtutar += sure * 2;
++    } else if (sure < 30) {
++      toplamtutar += sure * 2.3;
++    } else {
++      toplamtutar += sure * 2.5;
++    }
++
++    yaz(
++      `Benzin fiyatı (Opet Isparta Kurşunsuz 95): <b>${benzin.toFixed(2)} TL</b><br>` +
++      `Ev uzaklık (Konumunuz → Akkent TOKİ): <b>${evuzaklik.toFixed(2)} km</b><br>` +
++      `Toplam uzaklık (Konumunuz → Hedef + Hedef → Akkent TOKİ): <b>${toplamuzaklik.toFixed(2)} km</b><br><br>` +
++      `Toplam Ödeme (TL): <b>${toplamtutar.toFixed(2)}</b><br><br>` +
++      `<small>Not: Mesafe hesabı yol rotası servisi ile yapılmıştır.</small>`
++    );
++  } catch (err) {
++    yaz(`Hata: ${err.message}`);
++  } finally {
++    btn.disabled = false;
++  }
++}
++</script>
++</body>
++</html>
